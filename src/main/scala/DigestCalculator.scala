@@ -41,4 +41,3 @@ class DigestCalculator(algorithm: String) extends GraphStage[FlowShape[ByteStrin
 
   }
 }
-//val digest: Source[ByteString, NotUsed] = data.via(new DigestCalculator("SHA-256"))
