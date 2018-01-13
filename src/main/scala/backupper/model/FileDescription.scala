@@ -1,11 +1,11 @@
 package backupper.model
 
-import akka.util.ByteString
-import backupper.CustomByteArrayOutputStream
-import net.jpountz.lz4.LZ4Factory
-import org.slf4j.LoggerFactory
+import java.io.File
 
-case class FileDescription(val path: String, val size: Length) {
+case class FileDescription(val path: String, val size: Length, val lastModified: Long) {
+
+  def this(file: File) = this(file.getCanonicalPath, Length(file.length()), file.lastModified())
+
   var hash: Hash = _
 }
 

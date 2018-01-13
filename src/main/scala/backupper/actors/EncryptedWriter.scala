@@ -6,6 +6,7 @@ import javax.crypto.Cipher
 import javax.crypto.spec.SecretKeySpec
 
 import akka.Done
+import backupper.LifeCycle
 import backupper.model.{Block, Length, StoredChunk}
 import org.bouncycastle.jce.provider.BouncyCastleProvider
 import org.slf4j.LoggerFactory
@@ -34,15 +35,18 @@ class BlockWriterActor extends BlockWriter {
     Future.successful(StoredChunk(currentFileName, block.hash, posBefore, Length(block.compressed.length)))
   }
 
-  override def finish(): Future[Done] = {
+  override def finish(): Future[Boolean] = {
     stream.close()
-    Future.successful(Done)
+    Future.successful(true)
+  }
+
+  override def startup(): Future[Boolean] = {
+    // nothing to do
+    Future.successful(true)
   }
 }
 
 
-trait BlockWriter {
+trait BlockWriter extends LifeCycle {
   def saveBlock(block: Block): Future[StoredChunk]
-
-  def finish(): Future[Done]
 }

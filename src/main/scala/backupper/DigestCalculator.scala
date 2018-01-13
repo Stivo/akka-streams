@@ -5,10 +5,11 @@ import java.security.MessageDigest
 import akka.stream.stage._
 import akka.stream.{Attributes, FlowShape, Inlet, Outlet}
 import akka.util.ByteString
+import backupper.model.Hash
 
-class DigestCalculator(algorithm: String) extends GraphStage[FlowShape[ByteString, ByteString]] {
+class DigestCalculator(algorithm: String) extends GraphStage[FlowShape[ByteString, Hash]] {
   val in = Inlet[ByteString]("DigestCalculator.in")
-  val out = Outlet[ByteString]("DigestCalculator.out")
+  val out = Outlet[Hash]("DigestCalculator.out")
   override val shape = FlowShape.of(in, out)
 
   override def createLogic(inheritedAttributes: Attributes): GraphStageLogic = new GraphStageLogic(shape) {
@@ -34,7 +35,7 @@ class DigestCalculator(algorithm: String) extends GraphStage[FlowShape[ByteStrin
       }
 
       override def onUpstreamFinish(): Unit = {
-        emit(out, ByteString(digest.digest()))
+        emit(out, Hash(ByteString(digest.digest())))
         completeStage()
       }
     })
