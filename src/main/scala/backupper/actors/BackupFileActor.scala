@@ -1,18 +1,15 @@
 package backupper.actors
 
-import java.io.{File, FileOutputStream, OutputStream}
-import java.util.zip.GZIPOutputStream
+import java.io.File
 
-import backupper.BackupFileHandler
 import backupper.model._
 import backupper.util.Implicits._
-import backupper.util.Json
-import com.fasterxml.jackson.core.util.DefaultPrettyPrinter
+import backupper.{BackupFileHandler, Config, JsonUser}
 import org.slf4j.LoggerFactory
 
 import scala.concurrent.Future
 
-class BackupFileActor extends BackupFileHandler {
+class BackupFileActor(val config: Config) extends BackupFileHandler with JsonUser {
   val logger = LoggerFactory.getLogger(getClass)
 
   private var hasChanged = false
@@ -22,12 +19,13 @@ class BackupFileActor extends BackupFileHandler {
 
   private var toBeStored: Set[FileDescription] = Set.empty
 
-  private val filename = "backup/metadata"
-  private val file = new File(filename + ".json")
+  private val filename = "metadata"
+  private val file = new File(config.backupDestinationFolder, filename + ".json")
 
   def startup(): Future[Boolean] = {
     if (file.exists()) {
-      previous = Json.mapper.readValue[Seq[FileMetadata]](file).map(x => (x.fd, x)).toMap
+      val seq = readJson[Seq[FileMetadata]](file)
+      previous = seq.map(x => (x.fd, x)).toMap
     }
     Future.successful(true)
   }
@@ -63,33 +61,12 @@ class BackupFileActor extends BackupFileHandler {
   override def finish(): Future[Boolean] = {
     if (hasChanged) {
       logger.info("Writing metadata")
-      writeAsJson()
-      writeAsJsonGz()
-      writeSmile()
+      writeToJson(file, thisBackup.values)
       logger.info("Done Writing metadata")
     }
     Future.successful(true)
   }
 
-  private def writeAsJson() = {
-    val stream: OutputStream = new FileOutputStream(filename + ".json")
-    Json.mapper.writer(new DefaultPrettyPrinter()).writeValue(stream, thisBackup.values)
-    stream.close()
-  }
-
-  private def writeAsJsonGz() = {
-    var stream: OutputStream = new FileOutputStream(filename + ".json.gz")
-    stream = new GZIPOutputStream(stream)
-    Json.mapper.writer(new DefaultPrettyPrinter()).writeValue(stream, thisBackup.values)
-    stream.close()
-  }
-
-  private def writeSmile() = {
-    var stream: OutputStream = new FileOutputStream(filename + ".smile")
-    stream = new GZIPOutputStream(stream)
-    Json.smileMapper.writer().writeValue(stream, thisBackup.values)
-    stream.close()
-  }
 
 }
 

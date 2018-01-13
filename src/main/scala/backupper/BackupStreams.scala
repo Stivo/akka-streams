@@ -11,7 +11,7 @@ import akka.actor.{ActorSystem, TypedActor, TypedProps}
 import akka.stream.scaladsl._
 import akka.stream.{ActorMaterializer, ClosedShape, OverflowStrategy}
 import akka.util.{ByteString, Timeout}
-import backupper.actors.{BackupFileActor, BlockStorageActor, BlockWriter, BlockWriterActor}
+import backupper.actors.{BackupFileActor, BlockStorageIndexActor, ChunkHandler, ChunkStorageActor}
 import backupper.model._
 import backupper.util.{CompressedStream, CompressionMode}
 import org.apache.commons.io.FileUtils
@@ -28,20 +28,22 @@ object BackupStreams {
   implicit val system = ActorSystem("Sys")
   implicit val materializer = ActorMaterializer()
 
-  private val blockStorageProps: TypedProps[BlockStorageActor] = TypedProps.apply[BlockStorageActor](classOf[BlockStorage], classOf[BlockStorageActor])
+  val config = new Config(new File("backup"))
+  config.key = ByteString(FileUtils.readFileToByteArray(new File("key.txt")))
+  config.compressionMode = CompressionMode.snappy
+
+  private val chunkWriterProps: TypedProps[ChunkStorageActor] = TypedProps.apply[ChunkStorageActor](classOf[ChunkHandler], new ChunkStorageActor(config))
+  val chunkWriter: ChunkHandler = TypedActor(system).typedActorOf(chunkWriterProps.withTimeout(5.minutes))
+
+  private val blockStorageProps: TypedProps[BlockStorage] = TypedProps.apply(classOf[BlockStorage], new BlockStorageIndexActor(config, chunkWriter))
   val blockStorageActor: BlockStorage = TypedActor(system).typedActorOf(blockStorageProps.withTimeout(5.minutes))
 
-  private val backupFileActorProps: TypedProps[BackupFileActor] = TypedProps.apply[BackupFileActor](classOf[BackupFileHandler], classOf[BackupFileActor])
+  private val backupFileActorProps: TypedProps[BackupFileActor] = TypedProps.apply[BackupFileActor](classOf[BackupFileHandler], new BackupFileActor(config))
   val backupFileActor: BackupFileHandler = TypedActor(system).typedActorOf(backupFileActorProps.withTimeout(5.minutes))
-
-  private val blockWriterProps: TypedProps[BlockWriterActor] = TypedProps.apply[BlockWriterActor](classOf[BlockWriter], classOf[BlockWriterActor])
-  val blockWriter: BlockWriter = TypedActor(system).typedActorOf(blockWriterProps.withTimeout(5.minutes))
 
   val cpuService = Executors.newFixedThreadPool(10)
   implicit val ex = ExecutionContext.fromExecutorService(cpuService)
 
-  val config = new Config()
-  config.compressionMode = CompressionMode.lzma
 
   def main(args: Array[String]): Unit = {
 //    FileUtils.deleteDirectory(new File("backup"))
@@ -50,7 +52,7 @@ object BackupStreams {
     val service = Executors.newFixedThreadPool(5)
     implicit val ex = ExecutionContext.fromExecutorService(service)
 
-    val actors: Seq[LifeCycle] = Seq(backupFileActor, blockStorageActor, blockWriter)
+    val actors: Seq[LifeCycle] = Seq(backupFileActor, blockStorageActor, chunkWriter)
     for (fut <- actors.map(_.startup())) {
       Await.result(fut, 1.minute)
     }
@@ -127,7 +129,7 @@ object BackupStreams {
             }
 
             val sendToWriter = Flow[Block].mapAsync(2) { b =>
-              blockWriter.saveBlock(b)
+              chunkWriter.saveBlock(b)
             }
 
             val sendToBlockIndex = Flow[StoredChunk].mapAsync(2) { b =>
