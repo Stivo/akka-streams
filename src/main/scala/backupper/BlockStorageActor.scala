@@ -14,12 +14,12 @@ class BlockStorageActor extends Actor {
   override def receive: Receive = {
     case b@Block(_, _, hash) =>
       if (!map.contains(hash)) {
-        logger.info(s"${hashCode()} has not yet seen $hash")
+//        logger.info(s"${hashCode()} has not yet seen $hash")
         map += hash -> i
         i += 1
         sender() ! Tuple2(b, true)
       } else {
-        logger.info(s"${hashCode()} has already seen $hash")
+//        logger.info(s"${hashCode()} has already seen $hash")
         sender() ! Tuple2(b, false)
       }
   }

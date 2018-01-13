@@ -36,8 +36,8 @@ class Framer(prefix: String = "") extends GraphStage[FlowShape[ByteString, ByteS
             System.arraycopy(array, pos, bytes, 0, i)
             byteString = byteString ++ ByteString(bytes)
             pos += i
-            println(s"${prefix} Emitting ${byteString.size}")
-            push(out, byteString)
+            //println(s"${prefix} Emitting ${byteString.size}")
+            emit(out, byteString)
             byteString = ByteString.empty
             buzHash.reset()
           } else {

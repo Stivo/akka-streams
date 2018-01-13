@@ -42,7 +42,7 @@ class Logger(prefix: String, printContent: Boolean = false) extends GraphStage[F
           ""
         }
 
-        println(s"${prefix} ${counter} Got chunk of length ${chunk.size}$content")
+//        logger.debug(s"${prefix} ${counter} Got chunk of length ${chunk.size}$content")
         counter += 1
         push(out, chunk)
         readyFrames = readyFrames :+ chunk

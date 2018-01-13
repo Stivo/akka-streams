@@ -1,5 +1,6 @@
 package backupper
 
+import java.nio.ByteBuffer
 import java.nio.file.{Files, Paths}
 import java.security.MessageDigest
 import java.util.concurrent.Executors
@@ -12,10 +13,12 @@ import akka.pattern.ask
 import akka.stream.scaladsl._
 import akka.stream.{ActorMaterializer, ClosedShape}
 import akka.util.{ByteString, Timeout}
+import net.jpountz.lz4.{LZ4Compressor, LZ4Factory}
 import org.slf4j.LoggerFactory
+import org.tukaani.xz.{FilterOptions, LZMA2Options, XZOutputStream}
 
 import scala.collection.JavaConverters._
-import scala.collection.immutable
+import scala.collection.{immutable, mutable}
 import scala.concurrent.duration._
 import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.util.{Failure, Success}
@@ -43,18 +46,21 @@ object BackupStreams {
 
   def main(args: Array[String]): Unit = {
 
-    val service = Executors.newFixedThreadPool(4)
-    implicit val ex = ExecutionContext.fromExecutorService(service )
+    val service = Executors.newFixedThreadPool(50)
+    implicit val ex = ExecutionContext.fromExecutorService(service)
 
     val start = System.currentTimeMillis()
     val stream = Files.walk(Paths.get(args(0)))
       .collect(Collectors.toList())
 
-    val futures: immutable.Seq[Future[Done]] = stream.asScala.filter(Files.isRegularFile(_)).map { x =>
-      graphBased("", x.toRealPath().toString)
+    val paths = stream.asScala.par.filter(Files.isRegularFile(_)).filterNot(_.toAbsolutePath.toString.contains("/.git/")).seq
+    val futures: immutable.Seq[(String, Future[Done])] = paths.map { x =>
+      val string = x.toRealPath().toString
+      (string, graphBased("", string))
     }.toList
-    for (fut <- futures) {
+    for ((filename, fut) <- futures) {
       Await.result(fut, 100.minutes)
+      //      logger.info(s"Finished backing up file $filename")
     }
     encryptedWriter ! Done
     system.terminate()
@@ -92,7 +98,7 @@ object BackupStreams {
 
         val blockStorage = Flow[Block].mapAsync(10) { x =>
           (blockStorageActor ? x).asInstanceOf[Future[(Block, Boolean)]]
-        }.filter(_._2).map(_._1).mapAsync(10)(x => Future (x.compress))
+        }.filter(_._2).map(_._1).mapAsync(10)(x => Future(x.compress))
 
         def mapped() = Flow[Any].map(_ => ())
 
@@ -127,6 +133,10 @@ case class FileDescription(var path: String, var size: Long) {
 
 case class BlockId(fd: FileDescription, blockNr: Int)
 
+object Block {
+  val factory = LZ4Factory.fastestJavaInstance()
+}
+
 case class Block(blockId: BlockId, content: ByteString, hash: ByteString) {
   val logger = LoggerFactory.getLogger(getClass)
 
@@ -134,12 +144,18 @@ case class Block(blockId: BlockId, content: ByteString, hash: ByteString) {
   var encrypted: ByteString = _
 
   def compress: Block = {
-    val stream = new CustomByteArrayOutputStream()
-    val gzip = new GZIPOutputStream(stream)
-    gzip.write(content.toArray)
-    gzip.close()
-    this.compressed = ByteString(stream.toByteArray)
-    logger.info(s"Compressed $hash")
+    val stream = new CustomByteArrayOutputStream(content.length + 10)
+//    val options = new LZMA2Options()
+//    val dictSize = Math.max(4 * 1024, content.length + 20)
+//    options.setDictSize(dictSize)
+//        val comp = new GZIPOutputStream(stream)
+//    val comp = new XZOutputStream(stream, options)
+//    comp.write(content.toArray)
+//    comp.close()
+//    this.compressed = ByteString(stream.toByteArray)
+    val compressed = Block.factory.fastCompressor().compress(content.toArray)
+    this.compressed = ByteString(compressed)
+    //    logger.info(s"Compressed $hash")
     this
   }
 
