@@ -13,9 +13,10 @@ class EncryptedWriterActor extends Actor {
     case b@Block(_, _, _) =>
       logger.info("encrypted writer done")
       stream.write(b.compressed.toArray)
-      stream.flush()
       sender() ! true
     case Done =>
+      logger.info("Closing file")
       stream.close()
+      logger.info("Closed file")
   }
 }

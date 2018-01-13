@@ -1,5 +1,7 @@
-import java.nio.file.Paths
+import java.nio.file.{Files, Paths}
 import java.security.MessageDigest
+import java.util.concurrent.Executors
+import java.util.stream.Collectors
 import java.util.zip.GZIPOutputStream
 
 import akka.Done
@@ -10,9 +12,10 @@ import akka.stream.{ActorMaterializer, ClosedShape}
 import akka.util.{ByteString, Timeout}
 import org.slf4j.LoggerFactory
 
-import scala.concurrent.ExecutionContext.Implicits.global
+import scala.collection.JavaConverters._
+import scala.collection.immutable
 import scala.concurrent.duration._
-import scala.concurrent.{Await, Future}
+import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.util.{Failure, Success}
 
 object BackupStreams {
@@ -24,6 +27,8 @@ object BackupStreams {
 
   val blockStorageActor = system.actorOf(Props(classOf[BlockStorageActor]))
   val encryptedWriter = system.actorOf(Props(classOf[EncryptedWriterActor]))
+  val cpuService = Executors.newFixedThreadPool(16)
+  implicit val ex = ExecutionContext.fromExecutorService(cpuService)
 
   val standardSink = Sink.onComplete {
     case Success(x) =>
@@ -35,20 +40,23 @@ object BackupStreams {
   val LoglevelPattern = """.*\[(DEBUG|INFO|WARN|ERROR)\].*""".r
 
   def main(args: Array[String]): Unit = {
-    // actor system and implicit materializer
 
-    // execution context
+    val service = Executors.newFixedThreadPool(4)
+    implicit val ex = ExecutionContext.fromExecutorService(service )
 
-    //    graphBased("1: ", "D:\\upload\\Civilization - Baba Yetu.mp4")
+    val stream = Files.walk(Paths.get(args(0)))
+      .collect(Collectors.toList())
 
-    val fut1 = graphBased("1: ", "D:\\upload\\Civilization - Baba Yetu.mp4")
-//    val fut2 = graphBased("2: ", "D:\\upload\\Civilization - Baba Yetu.mp4.ident")
-//    val fut3 = graphBased("3: ", "D:\\upload\\Civilization - Baba Yetu.mp4.shifted")
-    Await.result(fut1, 1.minute)
-//    Await.result(fut2)
-//    Await.result(fut3)
+    val futures: immutable.Seq[Future[Done]] = stream.asScala.filter(Files.isRegularFile(_)).map { x =>
+      graphBased("", x.toRealPath().toString)
+    }.toList
+    for (fut <- futures) {
+      Await.result(fut, 100.minutes)
+    }
     encryptedWriter ! Done
     system.terminate()
+    service.shutdown()
+    cpuService.shutdown()
   }
 
   implicit val timeout = Timeout(1 minute)
