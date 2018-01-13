@@ -1,12 +1,20 @@
 package backupper.util
 
-import java.io.OutputStream
+import java.io.{ByteArrayInputStream, OutputStream}
 
+import akka.util.ByteString
 import backupper.model.Hash
 
 object Implicits {
   import scala.language.higherKinds
-//  implicit def hashToWrapper(a: Hash): BytesWrapper = new BytesWrapper(a.bytes)
+
+  implicit class ByteStringPimped(byteString: ByteString) {
+    // TODO could be made faster with asByteBuffers and SequenceInputStream
+    def asInputStream() = new ByteArrayInputStream(byteString.toArray)
+  }
+
+
+  //  implicit def hashToWrapper(a: Hash): BytesWrapper = new BytesWrapper(a.bytes)
 //  implicit def hashToArray(a: Hash): Array[Byte] = a.bytes
 //  implicit class AwareMessageDigest(md: MessageDigest) {
 //    def update(bytesWrapper: BytesWrapper): Unit = {
@@ -20,11 +28,18 @@ object Implicits {
 //      new Hash(md.digest())
 //    }
 //  }
-//  implicit class AwareOutputStream(os: OutputStream) {
-//    def write(bytesWrapper: BytesWrapper) {
-//      os.write(bytesWrapper.array, bytesWrapper.offset, bytesWrapper.length)
-//    }
-//  }
+  implicit class AwareOutputStream(os: OutputStream) {
+    def write(bytesWrapper: ByteString) {
+      val buffers = bytesWrapper.asByteBuffers
+      if (buffers.forall(_.hasArray)) {
+        for (buffer <- bytesWrapper.asByteBuffers) {
+          os.write(buffer.array(), buffer.arrayOffset(), buffer.limit())
+        }
+      } else {
+          os.write(bytesWrapper.toArray)
+      }
+    }
+  }
 //  implicit class ByteArrayUtils(buf: Array[Byte]) extends RealEquality[Array[Byte]]{
 //    def ===(other: Array[Byte]): Boolean = java.util.Arrays.equals(buf, other)
 //    def wrap(): BytesWrapper = new BytesWrapper(buf)

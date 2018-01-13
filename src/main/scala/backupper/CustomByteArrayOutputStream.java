@@ -1,5 +1,7 @@
 package backupper;
 
+import akka.util.ByteString;
+
 import java.io.OutputStream;
 import java.io.UnsupportedEncodingException;
 import java.util.Arrays;
@@ -188,6 +190,10 @@ public class CustomByteArrayOutputStream extends OutputStream {
         throws UnsupportedEncodingException
     {
         return new String(buf, 0, count, charsetName);
+    }
+
+    public ByteString toByteString() {
+        return ByteString.fromArray(buf, 0, count);
     }
 
     /**

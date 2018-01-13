@@ -6,14 +6,15 @@ import akka.stream.stage._
 import akka.stream.{Attributes, FlowShape, Inlet, Outlet}
 import akka.util.ByteString
 import backupper.model.Hash
+import backupper.util.HashMethod
 
-class DigestCalculator(algorithm: String) extends GraphStage[FlowShape[ByteString, Hash]] {
+class DigestCalculator(hashMethod: HashMethod) extends GraphStage[FlowShape[ByteString, Hash]] {
   val in = Inlet[ByteString]("DigestCalculator.in")
   val out = Outlet[Hash]("DigestCalculator.out")
   override val shape = FlowShape.of(in, out)
 
   override def createLogic(inheritedAttributes: Attributes): GraphStageLogic = new GraphStageLogic(shape) {
-    val digest = MessageDigest.getInstance(algorithm)
+    val digest = hashMethod.newInstance()
 
     def tryPull(): Unit = {
       if (!hasBeenPulled(in)) {

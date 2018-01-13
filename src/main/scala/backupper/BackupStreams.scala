@@ -13,6 +13,7 @@ import akka.stream.{ActorMaterializer, ClosedShape, OverflowStrategy}
 import akka.util.{ByteString, Timeout}
 import backupper.actors.{BackupFileActor, BlockStorageActor, BlockWriter, BlockWriterActor}
 import backupper.model._
+import backupper.util.{CompressedStream, CompressionMode}
 import org.apache.commons.io.FileUtils
 import org.slf4j.LoggerFactory
 
@@ -39,8 +40,11 @@ object BackupStreams {
   val cpuService = Executors.newFixedThreadPool(10)
   implicit val ex = ExecutionContext.fromExecutorService(cpuService)
 
+  val config = new Config()
+  config.compressionMode = CompressionMode.lzma
+
   def main(args: Array[String]): Unit = {
-    //    FileUtils.deleteDirectory(new File("backup"))
+//    FileUtils.deleteDirectory(new File("backup"))
     FileUtils.deleteDirectory(new File("restored"))
     new File("backup").mkdir()
     val service = Executors.newFixedThreadPool(5)
@@ -52,8 +56,8 @@ object BackupStreams {
     }
 
     val start = System.currentTimeMillis()
-    backup(args, service)
-    //    restore(args, service)
+//    backup(args, service)
+    restore(args, service)
     val end = System.currentTimeMillis()
     logger.info(s"Took ${end - start} ms")
 
@@ -70,7 +74,7 @@ object BackupStreams {
       .collect(Collectors.toList())
 
     val paths = stream.asScala.filter(Files.isRegularFile(_)).filterNot(_.toAbsolutePath.toString.contains("/.git/"))
-    val function: Future[Done] = Source.fromIterator[Path](() => paths.iterator).mapAsync(10){ path =>
+    val function: Future[Done] = Source.fromIterator[Path](() => paths.iterator).mapAsync(10) { path =>
       backup(path)
     }.runWith(Sink.ignore)
     Await.result(function, 10.hours)
@@ -95,15 +99,14 @@ object BackupStreams {
 
             val fileContent = builder.add(Broadcast[ByteString](2))
             val hashedBlocks = builder.add(Broadcast[Block](2))
-            val zip = builder.add(Zip[ByteString, Hash]())
+            val toFileDescription = builder.add(Zip[ByteString, Hash]())
             val waitForCompletion = builder.add(Merge[Unit](2))
 
-            val hasher = new DigestCalculator("SHA-256")
+            val hasher = new DigestCalculator(config.hashMethod)
             val chunker = new Framer()
-            val logger1 = new Logger("log1", true)
 
             val createBlock = Flow[ByteString].zipWithIndex.map { case (x, i) =>
-              val hash = Hash(ByteString(MessageDigest.getInstance("SHA-256").digest(x.toArray)))
+              val hash = Hash(ByteString(config.newHasher.digest(x.toArray)))
               val b = Block(BlockId(fd, i.toInt), x, hash)
               b
             }
@@ -114,7 +117,7 @@ object BackupStreams {
               blockStorageActor.hasAlready(x).map { fut =>
                 (x, fut)
               }
-            }.filter(!_._2).map(_._1).mapAsync(8)(x => Future(x.compress))
+            }.filter(!_._2).map(_._1).mapAsync(8)(x => Future(x.compress(config)))
 
             def mapToUnit() = Flow[Any].map(_ => ())
 
@@ -140,13 +143,13 @@ object BackupStreams {
             }
 
             source ~> newBuffer[ByteString](100) ~> fileContent
-            fileContent ~> hasher ~> zip.in1
+            fileContent ~> hasher ~> toFileDescription.in1
             fileContent ~> chunker ~> createBlock ~> newBuffer[Block](20) ~> hashedBlocks
 
             hashedBlocks ~> blockStorage ~> newBuffer[Block](20) ~> sendToWriter ~> sendToBlockIndex ~> mapToUnit() ~> waitForCompletion.in(0)
-            hashedBlocks ~> concatHashes ~> zip.in0
+            hashedBlocks ~> concatHashes ~> toFileDescription.in0
 
-            zip.out ~> createFileDescription ~> mapToUnit() ~> waitForCompletion.in(1)
+            toFileDescription.out ~> createFileDescription ~> mapToUnit() ~> waitForCompletion.in(1)
 
             waitForCompletion.out ~> sink
             ClosedShape
@@ -164,10 +167,12 @@ object BackupStreams {
     eventualMetadatas.foreach { files =>
       for (file <- files) {
         val stream = new FileOutputStream(new File(restoreDest, file.fd.path.split("\\\\").last))
-        val source = Source.fromIterator[ByteString](() => file.blocks.grouped(16))
+        val source = Source.fromIterator[ByteString](() => file.blocks.grouped(config.hashLength))
         Await.result(source.mapAsync(10) { hashBytes =>
           val hash = Hash(hashBytes)
           blockStorageActor.read(hash)
+        }.mapAsync(10) { bs =>
+          Future(CompressedStream.decompressToBytes(bs))
         }.runForeach { x =>
           stream.write(x.toArray)
         }, 1.minute)

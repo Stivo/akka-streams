@@ -20,4 +20,6 @@ libraryDependencies += "com.fasterxml.jackson.module" %% "jackson-module-scala" 
 
 libraryDependencies += "commons-io" % "commons-io" % "2.6"
 
+libraryDependencies += "org.iq80.snappy" % "snappy" % "0.4"
+
 enablePlugins(PackPlugin)

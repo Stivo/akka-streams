@@ -10,6 +10,7 @@ import backupper.LifeCycle
 import backupper.model.{Block, Length, StoredChunk}
 import org.bouncycastle.jce.provider.BouncyCastleProvider
 import org.slf4j.LoggerFactory
+import backupper.util.Implicits._
 
 import scala.concurrent.Future
 
@@ -30,7 +31,7 @@ class BlockWriterActor extends BlockWriter {
 
   override def saveBlock(block: Block): Future[StoredChunk] = {
     var posBefore = pos
-    stream.write(block.compressed.toArray)
+    stream.write(block.compressed)
     pos += block.compressed.length
     Future.successful(StoredChunk(currentFileName, block.hash, posBefore, Length(block.compressed.length)))
   }
