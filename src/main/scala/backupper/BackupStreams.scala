@@ -1,3 +1,5 @@
+package backupper
+
 import java.nio.file.{Files, Paths}
 import java.security.MessageDigest
 import java.util.concurrent.Executors

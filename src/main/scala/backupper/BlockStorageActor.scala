@@ -1,4 +1,5 @@
-import BackupStreams.getClass
+package backupper
+
 import akka.actor.Actor
 import akka.util.ByteString
 import org.slf4j.LoggerFactory

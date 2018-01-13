@@ -1,9 +1,9 @@
+package backupper
+
 import java.security.MessageDigest
 
-import akka.NotUsed
-import akka.stream.scaladsl.Source
-import akka.stream.{Attributes, FlowShape, Inlet, Outlet}
 import akka.stream.stage._
+import akka.stream.{Attributes, FlowShape, Inlet, Outlet}
 import akka.util.ByteString
 
 class DigestCalculator(algorithm: String) extends GraphStage[FlowShape[ByteString, ByteString]] {
