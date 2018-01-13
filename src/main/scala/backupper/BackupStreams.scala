@@ -46,6 +46,7 @@ object BackupStreams {
     val service = Executors.newFixedThreadPool(4)
     implicit val ex = ExecutionContext.fromExecutorService(service )
 
+    val start = System.currentTimeMillis()
     val stream = Files.walk(Paths.get(args(0)))
       .collect(Collectors.toList())
 
@@ -59,6 +60,8 @@ object BackupStreams {
     system.terminate()
     service.shutdown()
     cpuService.shutdown()
+    val end = System.currentTimeMillis()
+    logger.info(s"Took ${end - start} ms")
   }
 
   implicit val timeout = Timeout(1 minute)
