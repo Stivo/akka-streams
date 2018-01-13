@@ -46,7 +46,6 @@ object Json {
     println(json)
     val clazz = manifest[T].runtimeClass
     println(s"Class is $clazz")
-    //    val file = new File("blockIndex.json")
     val deserialized = mapper.readValue[T](json)
     println(deserialized)
   }

@@ -16,7 +16,7 @@ import scala.concurrent.Future
 class BlockWriterActor extends BlockWriter {
   val logger = LoggerFactory.getLogger(getClass)
 
-  private val currentFileName = "blocks.kvs"
+  private val currentFileName = "backup/blocks.kvs"
   //  lazy val stream = new FileOutputStream("/home/stivo/benchmark/testdir/linux-descabato-storage/blocks.kvs")
   private lazy val stream = new FileOutputStream(currentFileName, true)
 

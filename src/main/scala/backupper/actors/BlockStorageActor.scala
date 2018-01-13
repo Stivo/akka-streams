@@ -1,8 +1,9 @@
 package backupper.actors
 
-import java.io.{File, FileOutputStream, OutputStream}
+import java.io.{File, FileOutputStream, OutputStream, RandomAccessFile}
 import java.util.zip.GZIPOutputStream
 
+import akka.util.ByteString
 import backupper.BlockStorage
 import backupper.model.{Block, Hash, StoredChunk}
 import backupper.util.Implicits._
@@ -23,8 +24,9 @@ class BlockStorageActor extends BlockStorage {
 
   private var toBeStored: Set[Hash] = Set.empty
 
-  private val value = "blockIndex"
+  private val value = "backup/blockIndex"
   val file = new File(value + ".json")
+  lazy val raf = new RandomAccessFile("backup/blocks.kvs", "r")
 
   def startup(): Future[Boolean] = {
     if (file.exists()) {
@@ -46,6 +48,14 @@ class BlockStorageActor extends BlockStorage {
     map += storedChunk.hash -> storedChunk
     toBeStored -= storedChunk.hash
     Future.successful(true)
+  }
+
+  def read(hash: Hash): Future[ByteString] = {
+    val chunk: StoredChunk = map(hash)
+    raf.seek(chunk.startPos)
+    val value = Array.ofDim[Byte](chunk.length.size.toInt)
+    raf.readFully(value)
+    Future.successful(ByteString(value))
   }
 
   override def finish(): Future[Boolean] = {

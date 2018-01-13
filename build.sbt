@@ -18,4 +18,6 @@ libraryDependencies += "com.fasterxml.jackson.dataformat" % "jackson-dataformat-
 
 libraryDependencies += "com.fasterxml.jackson.module" %% "jackson-module-scala" % "2.9.2"
 
+libraryDependencies += "commons-io" % "commons-io" % "2.6"
+
 enablePlugins(PackPlugin)

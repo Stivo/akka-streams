@@ -22,7 +22,7 @@ class BackupFileActor extends BackupFileHandler {
 
   private var toBeStored: Set[FileDescription] = Set.empty
 
-  private val filename = "metadata"
+  private val filename = "backup/metadata"
   private val file = new File(filename + ".json")
 
   def startup(): Future[Boolean] = {
@@ -30,6 +30,10 @@ class BackupFileActor extends BackupFileHandler {
       previous = Json.mapper.readValue[Seq[FileMetadata]](file).map(x => (x.fd, x)).toMap
     }
     Future.successful(true)
+  }
+
+  override def backedUpFiles(): Future[Seq[FileMetadata]]  = {
+    Future.successful(previous.values.toSeq)
   }
 
   override def hasAlready(fd: FileDescription): Future[Boolean] = {

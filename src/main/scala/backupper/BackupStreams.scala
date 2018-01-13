@@ -1,8 +1,9 @@
 package backupper
 
+import java.io.{File, FileOutputStream}
 import java.nio.file.{Files, Paths}
 import java.security.MessageDigest
-import java.util.concurrent.Executors
+import java.util.concurrent.{ExecutorService, Executors}
 import java.util.stream.Collectors
 
 import akka.Done
@@ -12,6 +13,7 @@ import akka.stream.{ActorMaterializer, ClosedShape}
 import akka.util.{ByteString, Timeout}
 import backupper.actors.{BackupFileActor, BlockStorageActor, BlockWriter, BlockWriterActor}
 import backupper.model._
+import org.apache.commons.io.FileUtils
 import org.slf4j.LoggerFactory
 
 import scala.collection.JavaConverters._
@@ -38,20 +40,60 @@ object BackupStreams {
   val cpuService = Executors.newFixedThreadPool(16)
   implicit val ex = ExecutionContext.fromExecutorService(cpuService)
 
-  def main(args: Array[String]): Unit = {
+  def restore(args: Array[String], service: ExecutorService) = {
+    val restoreDest = new File("restored")
+    restoreDest.mkdirs()
+    var finished: Boolean = false
+    val eventualMetadatas = backupFileActor.backedUpFiles()
+    eventualMetadatas.foreach { files =>
+      for (file <- files) {
+        val stream = new FileOutputStream(new File(restoreDest, file.fd.path.split("\\\\").last))
+        val source = Source.fromIterator[ByteString](() => file.blocks.grouped(16))
+        Await.result(source.mapAsync(10) { hashBytes =>
+          val hash = Hash(hashBytes)
+          blockStorageActor.read(hash)
+        }.runForeach { x =>
+          stream.write(x.toArray)
+        }, 1.minute)
+        stream.close()
+      }
+      finished = true
+    }
+    while (!finished) {
+      Thread.sleep(500)
+    }
+  }
 
+  def main(args: Array[String]): Unit = {
+    //    FileUtils.deleteDirectory(new File("backup"))
+    FileUtils.deleteDirectory(new File("restored"))
+    new File("backup").mkdir()
     val service = Executors.newFixedThreadPool(5)
     implicit val ex = ExecutionContext.fromExecutorService(service)
-
-    Await.result(blockStorageActor.startup(), 1.minute)
-    val start = System.currentTimeMillis()
-    val stream = Files.walk(Paths.get(args(0)))
-      .collect(Collectors.toList())
 
     val actors: Seq[LifeCycle] = Seq(backupFileActor, blockStorageActor, blockWriter)
     for (fut <- actors.map(_.startup())) {
       Await.result(fut, 1.minute)
     }
+
+    val start = System.currentTimeMillis()
+        backup(args, service)
+//    restore(args, service)
+    val end = System.currentTimeMillis()
+    logger.info(s"Took ${end - start} ms")
+
+    for (fut <- actors.map(_.finish())) {
+      Await.result(fut, 1.minute)
+    }
+    system.terminate()
+    service.shutdown()
+    cpuService.shutdown()
+  }
+
+  private def backup(args: Array[String], service: ExecutorService) = {
+    val stream = Files.walk(Paths.get(args(0)))
+      .collect(Collectors.toList())
+
 
     val paths = stream.asScala.filter(Files.isRegularFile(_)).filterNot(_.toAbsolutePath.toString.contains("/.git/"))
     val futures: immutable.Seq[(String, Future[Done])] = paths.map { x =>
@@ -61,14 +103,6 @@ object BackupStreams {
     for ((filename, fut) <- futures) {
       Await.result(fut, 100.minutes)
     }
-    for (fut <- actors.map(_.finish())) {
-      Await.result(fut, 1.minute)
-    }
-    system.terminate()
-    service.shutdown()
-    cpuService.shutdown()
-    val end = System.currentTimeMillis()
-    logger.info(s"Took ${end - start} ms")
   }
 
   implicit val timeout = Timeout(1.minute)

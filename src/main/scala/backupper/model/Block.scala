@@ -21,8 +21,9 @@ case class Block(blockId: BlockId, content: ByteString, hash: Hash) {
 //    comp.write(content.toArray)
 //    comp.close()
 //    this.compressed = ByteString(stream.toByteArray)
-    val compressed = Block.factory.fastCompressor().compress(content.toArray)
-    this.compressed = ByteString(compressed)
+//    val compressed = Block.factory.fastCompressor().compress(content.toArray)
+//    this.compressed = ByteString(compressed)
+    this.compressed = content
     //    logger.info(s"Compressed $hash")
     this
   }

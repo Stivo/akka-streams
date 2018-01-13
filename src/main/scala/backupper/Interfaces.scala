@@ -1,10 +1,13 @@
 package backupper
 
-import backupper.model.{Block, FileDescription, FileMetadata, StoredChunk}
+import akka.util.ByteString
+import backupper.model._
 
 import scala.concurrent.Future
 
 trait BlockStorage extends LifeCycle {
+  def read(hash: Hash): Future[ByteString]
+
   def hasAlready(block: Block): Future[Boolean]
 
   def save(storedChunk: StoredChunk): Future[Boolean]
@@ -12,6 +15,8 @@ trait BlockStorage extends LifeCycle {
 }
 
 trait BackupFileHandler extends LifeCycle {
+  def backedUpFiles(): Future[Seq[FileMetadata]]
+
   def hasAlready(fileDescription: FileDescription): Future[Boolean]
 
   def saveFile(fileMetadata: FileMetadata): Future[Boolean]
