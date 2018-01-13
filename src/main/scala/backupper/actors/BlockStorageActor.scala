@@ -9,9 +9,7 @@ import backupper.model.{Block, Hash, StoredChunk}
 import backupper.util.Implicits._
 import backupper.util.Json
 import com.fasterxml.jackson.core.util.DefaultPrettyPrinter
-import com.fasterxml.jackson.dataformat.smile.SmileFactory
 import org.slf4j.LoggerFactory
-import org.tukaani.xz.LZMAOutputStream
 
 import scala.concurrent.Future
 
@@ -60,16 +58,17 @@ class BlockStorageActor extends BlockStorage {
 
   override def finish(): Future[Boolean] = {
     if (hasChanged) {
+      logger.info("Started writing blocks metadata")
       writeAsJson()
       writeAsJsonGz()
       writeSmile()
+      logger.info("Done Writing blocks metadata")
     }
     Future.successful(true)
   }
 
   private def writeAsJson() = {
     var stream: OutputStream = new FileOutputStream(file)
-    //    stream = new GZIPOutputStream(stream)
     Json.mapper.writer(new DefaultPrettyPrinter()).writeValue(stream, map.values)
     stream.close()
   }
@@ -83,10 +82,10 @@ class BlockStorageActor extends BlockStorage {
 
   private def writeSmile() = {
     var stream: OutputStream = new FileOutputStream(value + ".smile")
-    stream = new GZIPOutputStream(stream)
     Json.smileMapper.writer().writeValue(stream, map.values)
     stream.close()
   }
+
 }
 
 

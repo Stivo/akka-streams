@@ -32,6 +32,10 @@ class BackupFileActor extends BackupFileHandler {
     Future.successful(true)
   }
 
+  def alreadySavedFiles(): Future[Set[FileDescription]] = {
+    Future.successful(previous.keySet)
+  }
+
   override def backedUpFiles(): Future[Seq[FileMetadata]]  = {
     Future.successful(previous.values.toSeq)
   }
@@ -58,9 +62,11 @@ class BackupFileActor extends BackupFileHandler {
 
   override def finish(): Future[Boolean] = {
     if (hasChanged) {
+      logger.info("Writing metadata")
       writeAsJson()
       writeAsJsonGz()
       writeSmile()
+      logger.info("Done Writing metadata")
     }
     Future.successful(true)
   }

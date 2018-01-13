@@ -13,16 +13,8 @@ import com.fasterxml.jackson.module.scala.experimental.ScalaObjectMapper
 
 object Json {
 
-  //  def write[T](t: T, stream: OutputStream) = {
-  //    mapper.writer().writeValue(stream, t)
-  //  }
-  //
-  //  def read[T](content: InputStream) = {
-  //    mapper.reader().readValue[T](content)
-  //  }
-
   val mapper = new CustomObjectMapper()
-  val smileMapper = new CustomObjectMapper(smile = true)
+  val smileMapper = new CustomObjectMapper(new SmileFactory())
 
   def main(args: Array[String]): Unit = {
     tryMap
@@ -51,7 +43,7 @@ object Json {
   }
 }
 
-class CustomObjectMapper(smile: Boolean = false) extends ObjectMapper(if (smile) new SmileFactory() else new JsonFactory()) with ScalaObjectMapper {
+class CustomObjectMapper(val jsonFactory: JsonFactory = new JsonFactory()) extends ObjectMapper(jsonFactory) with ScalaObjectMapper {
 
   override def constructType[T](implicit m: Manifest[T]): JavaType = {
     val ByteStringName = classOf[ByteString].getName
