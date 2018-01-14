@@ -4,7 +4,8 @@ import java.io.File
 
 import akka.util.ByteString
 import backupper.model.{Block, Length, StoredChunk}
-import backupper.{Config, JsonUser, LifeCycle}
+import backupper.util.{FileReader, FileWriter}
+import backupper.{Config, LifeCycle}
 import org.slf4j.LoggerFactory
 
 import scala.concurrent.Future
@@ -15,8 +16,23 @@ class ChunkStorageActor(val config: Config) extends ChunkHandler {
   private val currentFileName = "blocks.kvs"
   val destinationFile = new File(config.backupDestinationFolder, currentFileName)
 
-  private lazy val writer = config.newWriter(destinationFile)
-  private lazy val reader = config.newReader(destinationFile)
+  var _writer: FileWriter = _
+
+  private def writer = {
+    if (_writer == null) {
+      _writer = config.newWriter(destinationFile)
+    }
+    _writer
+  }
+
+  var _reader: FileReader = _
+
+  private def reader = {
+    if (_reader == null) {
+      _reader = config.newReader(destinationFile)
+    }
+    _reader
+  }
 
   override def saveBlock(block: Block): Future[StoredChunk] = {
     val posBefore = writer.write(block.compressed)
@@ -24,8 +40,12 @@ class ChunkStorageActor(val config: Config) extends ChunkHandler {
   }
 
   override def finish(): Future[Boolean] = {
-    writer.finish()
-    reader.close()
+    if (_writer != null) {
+      writer.finish()
+    }
+    if (_reader != null) {
+      reader.close()
+    }
     Future.successful(true)
   }
 
@@ -42,5 +62,6 @@ class ChunkStorageActor(val config: Config) extends ChunkHandler {
 
 trait ChunkHandler extends LifeCycle {
   def saveBlock(block: Block): Future[StoredChunk]
+
   def read(storedChunk: StoredChunk): Future[ByteString]
 }

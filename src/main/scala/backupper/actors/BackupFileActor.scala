@@ -60,14 +60,16 @@ class BackupFileActor(val config: Config) extends BackupFileHandler with JsonUse
 
   override def finish(): Future[Boolean] = {
     if (hasChanged) {
-      logger.info("Writing metadata")
+      logger.info(s"Writing metadata of ${thisBackup.values.size} files")
       writeToJson(file, thisBackup.values)
       logger.info("Done Writing metadata")
     }
     Future.successful(true)
   }
 
-
+  override def preRestart(reason: Throwable, message: Option[Any]): Unit = {
+    logger.error("Actor was restarted", reason)
+  }
 }
 
 

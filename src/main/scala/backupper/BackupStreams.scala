@@ -2,7 +2,6 @@ package backupper
 
 import java.io.{File, FileOutputStream}
 import java.nio.file.{Files, Path, Paths}
-import java.security.MessageDigest
 import java.util.concurrent.{ExecutorService, Executors}
 import java.util.stream.Collectors
 
@@ -22,15 +21,17 @@ import scala.concurrent.duration._
 import scala.concurrent.{Await, ExecutionContext, Future}
 
 object BackupStreams {
+  val config = new Config(new File("/home/stivo/benchmark/testdir/linux-descabato-storage"))
+  config.key = ByteString(FileUtils.readFileToByteArray(new File("/home/stivo/akka-streams/key.txt")).take(16))
+  config.compressionMode = CompressionMode.snappy
+
+  System.setProperty("logname", config.backupDestinationFolder + "/backup.log")
 
   val logger = LoggerFactory.getLogger(getClass)
 
   implicit val system = ActorSystem("Sys")
   implicit val materializer = ActorMaterializer()
 
-  val config = new Config(new File("backup"))
-  config.key = ByteString(FileUtils.readFileToByteArray(new File("key.txt")))
-  config.compressionMode = CompressionMode.snappy
 
   private val chunkWriterProps: TypedProps[ChunkStorageActor] = TypedProps.apply[ChunkStorageActor](classOf[ChunkHandler], new ChunkStorageActor(config))
   val chunkWriter: ChunkHandler = TypedActor(system).typedActorOf(chunkWriterProps.withTimeout(5.minutes))
@@ -46,9 +47,9 @@ object BackupStreams {
 
 
   def main(args: Array[String]): Unit = {
-//    FileUtils.deleteDirectory(new File("backup"))
+    //    FileUtils.deleteDirectory(new File("backup"))
     FileUtils.deleteDirectory(new File("restored"))
-    new File("backup").mkdir()
+    //    new File("backup").mkdir()
     val service = Executors.newFixedThreadPool(5)
     implicit val ex = ExecutionContext.fromExecutorService(service)
 
@@ -58,8 +59,8 @@ object BackupStreams {
     }
 
     val start = System.currentTimeMillis()
-//    backup(args, service)
-    restore(args, service)
+    backup(args, service)
+//        restore(args, service)
     val end = System.currentTimeMillis()
     logger.info(s"Took ${end - start} ms")
 
@@ -75,7 +76,9 @@ object BackupStreams {
     val stream = Files.walk(Paths.get(args(0)))
       .collect(Collectors.toList())
 
+    logger.info(s"Found ${stream.size()} files")
     val paths = stream.asScala.filter(Files.isRegularFile(_)).filterNot(_.toAbsolutePath.toString.contains("/.git/"))
+    logger.info(s"After filtering ${paths.size} remain")
     val function: Future[Done] = Source.fromIterator[Path](() => paths.iterator).mapAsync(10) { path =>
       backup(path)
     }.runWith(Sink.ignore)
@@ -88,10 +91,13 @@ object BackupStreams {
     val fd = new FileDescription(path.toFile)
 
     backupFileActor.hasAlready(fd).flatMap { hasAlready =>
-      if (hasAlready) {
-        backupFileActor.saveFileSameAsBefore(fd)
-        Future.successful(Done)
-      } else {
+//      if (hasAlready) {
+//        logger.info(s"Backup for $fd already exists")
+//        backupFileActor.saveFileSameAsBefore(fd).recoverWith { case e =>
+//          logger.error(s"Could not back up $fd", e)
+//          Future(Done)
+//        }.map(_ => Done)
+//      } else {
         val sinkIn = Sink.ignore
 
         val graph = RunnableGraph.fromGraph(GraphDSL.create(sinkIn) { implicit builder =>
@@ -157,7 +163,7 @@ object BackupStreams {
             ClosedShape
         })
         graph.run()
-      }
+//      }
     }
   }
 
@@ -167,8 +173,11 @@ object BackupStreams {
     var finished: Boolean = false
     val eventualMetadatas = backupFileActor.backedUpFiles()
     eventualMetadatas.foreach { files =>
+      println(s"Restoring ${files.size} files")
       for (file <- files) {
-        val stream = new FileOutputStream(new File(restoreDest, file.fd.path.split("\\\\").last))
+        val restoreDestination = new File(restoreDest, file.fd.path)
+        restoreDestination.getParentFile.mkdirs()
+        val stream = new FileOutputStream(restoreDestination)
         val source = Source.fromIterator[ByteString](() => file.blocks.grouped(config.hashLength))
         Await.result(source.mapAsync(10) { hashBytes =>
           val hash = Hash(hashBytes)
@@ -179,6 +188,7 @@ object BackupStreams {
           stream.write(x.toArray)
         }, 1.minute)
         stream.close()
+        restoreDestination.setLastModified(file.fd.lastModified)
       }
       finished = true
     }

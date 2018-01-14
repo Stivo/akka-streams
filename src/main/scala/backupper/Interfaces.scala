@@ -2,6 +2,7 @@ package backupper
 
 import java.io.File
 
+import akka.actor.TypedActor
 import akka.util.ByteString
 import backupper.model._
 import backupper.util.Implicits._
@@ -20,7 +21,7 @@ trait BlockStorage extends LifeCycle {
 
 }
 
-trait BackupFileHandler extends LifeCycle {
+trait BackupFileHandler extends LifeCycle with TypedActor.PreRestart {
   def backedUpFiles(): Future[Seq[FileMetadata]]
 
   def hasAlready(fileDescription: FileDescription): Future[Boolean]
