@@ -34,7 +34,7 @@ class BackupFileActor(val config: Config) extends BackupFileHandler with JsonUse
     Future.successful(previous.keySet)
   }
 
-  override def backedUpFiles(): Future[Seq[FileMetadata]]  = {
+  override def backedUpFiles(): Future[Seq[FileMetadata]] = {
     Future.successful(previous.values.toSeq)
   }
 
@@ -54,8 +54,13 @@ class BackupFileActor(val config: Config) extends BackupFileHandler with JsonUse
   }
 
   override def saveFileSameAsBefore(fd: FileDescription): Future[Boolean] = {
-    thisBackup += fd -> previous(fd)
-    Future.successful(true)
+    if (previous.safeContains(fd)) {
+      thisBackup += fd -> previous(fd)
+      Future.successful(true)
+    } else {
+      logger.warn(s"$fd was not part of previous backup, programming error (symlinks)")
+      Future.successful(false)
+    }
   }
 
   override def finish(): Future[Boolean] = {

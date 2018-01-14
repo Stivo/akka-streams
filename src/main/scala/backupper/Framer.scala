@@ -39,9 +39,7 @@ class Framer(prefix: String = "") extends GraphStage[FlowShape[ByteString, ByteS
             byteString = ByteString.empty
             buzHash.reset()
           } else {
-            val bytes = Array.ofDim[Byte](end - pos)
-            System.arraycopy(array, pos, bytes, 0, end - pos)
-            byteString = byteString ++ chunk
+            byteString = byteString ++ chunk.slice(pos, end - pos)
             pos = end
           }
         }

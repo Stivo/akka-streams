@@ -31,5 +31,7 @@ class SimpleFileReader(val file: File) extends FileReader {
     ByteString(value)
   }
 
-  override def close(): Unit = ???
+  override def close(): Unit = {
+    randomAccessReader.close()
+  }
 }

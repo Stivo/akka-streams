@@ -47,7 +47,7 @@ object BackupStreams {
 
 
   def main(args: Array[String]): Unit = {
-//        FileUtils.deleteDirectory(new File("backup"))
+    //        FileUtils.deleteDirectory(new File("backup"))
     FileUtils.deleteDirectory(new File("restored"))
     //    new File("backup").mkdir()
     config.backupDestinationFolder.mkdirs()
@@ -61,7 +61,7 @@ object BackupStreams {
 
     val start = System.currentTimeMillis()
     backup(args, service)
-//        restore(args, service)
+    //        restore(args, service)
     val end = System.currentTimeMillis()
     logger.info(s"Took ${end - start} ms")
 
@@ -80,7 +80,7 @@ object BackupStreams {
     logger.info(s"Found ${stream.size()} files")
     val paths = stream.asScala.filter(Files.isRegularFile(_)).filterNot(_.toAbsolutePath.toString.contains("/.git/"))
     logger.info(s"After filtering ${paths.size} remain")
-    val function: Future[Done] = Source.fromIterator[Path](() => paths.iterator).mapAsync(10) { path =>
+    val function: Future[Done] = Source.fromIterator[Path](() => paths.iterator).mapAsync(20) { path =>
       backup(path)
     }.runWith(Sink.ignore)
     Await.result(function, 10.hours)
@@ -92,13 +92,10 @@ object BackupStreams {
     val fd = new FileDescription(path.toFile)
 
     backupFileActor.hasAlready(fd).flatMap { hasAlready =>
-//      if (hasAlready) {
-//        logger.info(s"Backup for $fd already exists")
-//        backupFileActor.saveFileSameAsBefore(fd).recoverWith { case e =>
-//          logger.error(s"Could not back up $fd", e)
-//          Future(Done)
-//        }.map(_ => Done)
-//      } else {
+      if (hasAlready) {
+        logger.info(s"Backup for $fd already exists")
+        backupFileActor.saveFileSameAsBefore(fd).map(_ => Done)
+      } else {
         val sinkIn = Sink.ignore
 
         val graph = RunnableGraph.fromGraph(GraphDSL.create(sinkIn) { implicit builder =>
@@ -109,13 +106,20 @@ object BackupStreams {
             val hashedBlocks = builder.add(Broadcast[Block](2))
             val waitForCompletion = builder.add(Merge[Unit](2))
 
-            val hasher = new DigestCalculator(config.hashMethod)
             val chunker = new Framer()
 
-            val createBlock = Flow[ByteString].zipWithIndex.map { case (x, i) =>
-              val hash = Hash(ByteString(config.newHasher.digest(x.toArray)))
-              val b = Block(BlockId(fd, i.toInt), x, hash)
-              b
+            //          val createBlock = Flow[ByteString].zipWithIndex.map { case (x, i) =>
+            //            val hash = Hash(ByteString(config.newHasher.digest(x.toArray)))
+            //            val b = Block(BlockId(fd, i.toInt), x, hash)
+            //            b
+            //          }
+
+            val createBlock = Flow[ByteString].zipWithIndex.mapAsync(10) { case (x, i) =>
+              Future {
+                val hash = Hash(ByteString(config.newHasher.digest(x.toArray)))
+                val b = Block(BlockId(fd, i.toInt), x, hash)
+                b
+              }
             }
 
             def newBuffer[T](bufferSize: Int = 100) = Flow[T].buffer(bufferSize, OverflowStrategy.backpressure)
@@ -157,7 +161,7 @@ object BackupStreams {
             ClosedShape
         })
         graph.run()
-//      }
+      }
     }
   }
 
