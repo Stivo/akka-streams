@@ -32,9 +32,7 @@ class Framer(prefix: String = "") extends GraphStage[FlowShape[ByteString, ByteS
         while (pos < end) {
           val i = buzHash.updateAndReportBoundary(array, pos, array.length - pos, 20)
           if (i > 0) {
-            val bytes = Array.ofDim[Byte](i)
-            System.arraycopy(array, pos, bytes, 0, i)
-            byteString = byteString ++ ByteString(bytes)
+            byteString = byteString ++ chunk.slice(pos, pos + i)
             pos += i
             //println(s"${prefix} Emitting ${byteString.size}")
             emit(out, byteString)
@@ -43,7 +41,7 @@ class Framer(prefix: String = "") extends GraphStage[FlowShape[ByteString, ByteS
           } else {
             val bytes = Array.ofDim[Byte](end - pos)
             System.arraycopy(array, pos, bytes, 0, end - pos)
-            byteString = byteString ++ ByteString(bytes)
+            byteString = byteString ++ chunk
             pos = end
           }
         }

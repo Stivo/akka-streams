@@ -21,7 +21,7 @@ import scala.concurrent.duration._
 import scala.concurrent.{Await, ExecutionContext, Future}
 
 object BackupStreams {
-  val config = new Config(new File("/home/stivo/benchmark/testdir/linux-descabato-storage"))
+  val config = new Config(new File("backup"))
   config.key = ByteString(FileUtils.readFileToByteArray(new File("/home/stivo/akka-streams/key.txt")).take(16))
   config.compressionMode = CompressionMode.snappy
 
@@ -47,9 +47,10 @@ object BackupStreams {
 
 
   def main(args: Array[String]): Unit = {
-    //    FileUtils.deleteDirectory(new File("backup"))
+//        FileUtils.deleteDirectory(new File("backup"))
     FileUtils.deleteDirectory(new File("restored"))
     //    new File("backup").mkdir()
+    config.backupDestinationFolder.mkdirs()
     val service = Executors.newFixedThreadPool(5)
     implicit val ex = ExecutionContext.fromExecutorService(service)
 
@@ -105,9 +106,7 @@ object BackupStreams {
             import GraphDSL.Implicits._
             val source = FileIO.fromPath(path, chunkSize = 64 * 1024)
 
-            val fileContent = builder.add(Broadcast[ByteString](2))
             val hashedBlocks = builder.add(Broadcast[Block](2))
-            val toFileDescription = builder.add(Zip[ByteString, Hash]())
             val waitForCompletion = builder.add(Merge[Unit](2))
 
             val hasher = new DigestCalculator(config.hashMethod)
@@ -144,20 +143,15 @@ object BackupStreams {
 
             val concatHashes = Flow[Block].map(_.hash.byteString).fold(ByteString.empty)(_ ++ _)
 
-            val createFileDescription = Flow[(ByteString, Hash)].mapAsync(1) { case (hashlist, completeHash) =>
-              fd.hash = completeHash
+            val createFileDescription = Flow[ByteString].mapAsync(1) { hashlist =>
               val out = FileMetadata(fd, hashlist)
               backupFileActor.saveFile(out)
             }
 
-            source ~> newBuffer[ByteString](100) ~> fileContent
-            fileContent ~> hasher ~> toFileDescription.in1
-            fileContent ~> chunker ~> createBlock ~> newBuffer[Block](20) ~> hashedBlocks
+            source ~> newBuffer[ByteString](100) ~> chunker ~> createBlock ~> newBuffer[Block](20) ~> hashedBlocks
 
             hashedBlocks ~> blockStorage ~> newBuffer[Block](20) ~> sendToWriter ~> sendToBlockIndex ~> mapToUnit() ~> waitForCompletion.in(0)
-            hashedBlocks ~> concatHashes ~> toFileDescription.in0
-
-            toFileDescription.out ~> createFileDescription ~> mapToUnit() ~> waitForCompletion.in(1)
+            hashedBlocks ~> concatHashes ~> createFileDescription ~> mapToUnit() ~> waitForCompletion.in(1)
 
             waitForCompletion.out ~> sink
             ClosedShape

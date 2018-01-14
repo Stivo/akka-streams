@@ -6,6 +6,5 @@ case class FileDescription(val path: String, val size: Length, val lastModified:
 
   def this(file: File) = this(file.getCanonicalPath, Length(file.length()), file.lastModified())
 
-  var hash: Hash = _
 }
 
