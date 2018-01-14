@@ -5,8 +5,7 @@ import java.io.File
 import akka.actor.TypedActor
 import akka.util.ByteString
 import backupper.model._
-import backupper.util.Implicits._
-import backupper.util.Json
+import backupper.util.{CompressedStream, CompressionMode, Json}
 import com.fasterxml.jackson.core.util.DefaultPrettyPrinter
 
 import scala.concurrent.Future
@@ -37,13 +36,15 @@ trait JsonUser {
   def readJson[T: Manifest](file: File): T = {
     val reader = config.newReader(file)
     val bs = reader.readAllContent()
-    Json.mapper.readValue[T](bs.asInputStream)
+    val decompressed = CompressedStream.decompress(bs)
+    Json.mapper.readValue[T](decompressed)
   }
 
   def writeToJson[T](file: File, value: T) = {
     val writer = config.newWriter(file)
     val bytes = Json.mapper.writer(new DefaultPrettyPrinter()).writeValueAsBytes(value)
-    writer.write(ByteString(bytes))
+    val compressed = CompressedStream.compress(ByteString(bytes), CompressionMode.deflate)
+    writer.write(compressed)
     writer.finish()
   }
 }
