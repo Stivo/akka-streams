@@ -22,4 +22,6 @@ libraryDependencies += "commons-io" % "commons-io" % "2.6"
 
 libraryDependencies += "org.iq80.snappy" % "snappy" % "0.4"
 
+libraryDependencies += "io.reactivex.rxjava2" % "rxjava" % "2.1.8"
+
 enablePlugins(PackPlugin)
