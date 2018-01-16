@@ -2,11 +2,8 @@ package rxjava;
 
 import akka.util.ByteString;
 import backupper.BackupStreams;
-import backupper.model.Block;
-import backupper.model.BlockId;
-import backupper.model.FileDescription;
+import backupper.model.*;
 import com.github.davidmoten.rx2.Bytes;
-import io.reactivex.BackpressureStrategy;
 import io.reactivex.Flowable;
 import io.reactivex.Observable;
 import io.reactivex.flowables.ConnectableFlowable;
@@ -22,12 +19,14 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Future;
 import java.util.stream.IntStream;
 
+import static io.reactivex.BackpressureStrategy.BUFFER;
+
 public class RxjavaTest {
     public static void main(String[] args) throws Exception {
         System.setProperty("rx2.computation-threads", "8");
         Iterable<Integer> naturals = IntStream.iterate(0, i -> i + 1)::iterator;
-        File file = new File("backup/metadata.json");
-        Flowable<byte[]> from = Bytes.from(file, 1000);
+        File file = new File("restored/IMG_0001.JPG");
+        Flowable<byte[]> from = Bytes.from(file, 100000);
 
         CompletableFuture<Boolean> future1 = new CompletableFuture<>();
         CompletableFuture<Boolean> future2 = new CompletableFuture<>();
@@ -43,7 +42,7 @@ public class RxjavaTest {
 //            return state;
             return block;
         });
-        ParallelFlowable<Block> parallelBlocks = blockFlowable.flatMap(x -> Observable.just(x).toFlowable(BackpressureStrategy.BUFFER))
+        ParallelFlowable<Block> parallelBlocks = blockFlowable.flatMap(x -> Observable.just(x).toFlowable(BUFFER))
                 .parallel(10)
                 .runOn(Schedulers.computation(), 100);
 
@@ -53,14 +52,14 @@ public class RxjavaTest {
 //        parallelBlocks.sequential().forEach(e -> System.out.println(e));
         ConnectableFlowable<Block> md51 = parallelBlocks
                 .flatMap(block -> {
-                    MessageDigest md5 = MessageDigest.getInstance("MD5");
+                    MessageDigest messageDigest = BackupStreams.config().newHasher();
                     System.out.println("Computing hash for " + block.blockId());
-                    byte[] digest = md5.digest(block.content().toArray());
+                    byte[] digest = messageDigest.digest(block.content().toArray());
                     ByteString byteString = ByteString.fromArray(digest);
                     Block block1 = new Block(block.blockId(), block.content(), byteString);
                     Future<Block> booleanFuture = BackupStreams.blockStorageActor().hasAlreadyJava(block1);
 
-                    return Observable.fromFuture(booleanFuture).toFlowable(BackpressureStrategy.BUFFER);
+                    return Observable.fromFuture(booleanFuture).toFlowable(BUFFER);
                 }).map(e -> {
                     if (e.isAlreadySaved()) {
                         e.content_$eq(ByteString.empty());
@@ -72,8 +71,35 @@ public class RxjavaTest {
 //        md511.subscribe(subscribers);
 //
         md51.toSortedList(Comparator.comparingInt(b -> b.blockId().blockNr()))
-                .subscribe(e -> System.out.println("sorted " + e));
-        md51.subscribe(e -> System.out.println("asdfasdf" + e));
+                .flatMapObservable(e -> {
+                    int hashLength = BackupStreams.config().hashLength();
+                    byte[] bytes = new byte[e.size() * hashLength];
+                    for (Block block : e) {
+                        System.arraycopy(block.hash().toArray(), 0,
+                                bytes, block.blockId().blockNr() * hashLength, hashLength);
+                    }
+                    FileDescription fileDescription = new FileDescription(file);
+                    FileMetadata fileMetadata = new FileMetadata(fileDescription, ByteString.fromArray(bytes));
+                    CompletableFuture<Boolean> future = BackupStreams.backupFileActor().saveFileJava(fileMetadata);
+
+                    return Observable.fromFuture(future);
+                }).subscribe(e -> {}, e -> {e.printStackTrace();}, () -> future2.complete(true));
+        md51.parallel(10).runOn(Schedulers.computation())
+                .flatMap(block -> {
+                    block.compress(BackupStreams.config());
+                    CompletableFuture<StoredChunk> future = BackupStreams.chunkWriter().saveBlockJava(block);
+                    future.thenAccept(e -> {
+                        System.out.println("Freeing up memory of compressed content for " + block.blockId());
+                        block.compressed_$eq(ByteString.empty());
+                    });
+                    return Observable.fromFuture(future)
+                            .toFlowable(BUFFER);
+                }).flatMap(chunk -> {
+                    CompletableFuture<Object> future3 = BackupStreams.blockStorageActor().saveJava(chunk);
+                    return Observable.fromFuture(future3)
+                            .toFlowable(BUFFER);
+                }
+                ).sequential().subscribe(e -> {}, e -> {}, () -> future1.complete(true));
         md51.connect();
 //        md51.sequential().forEach(e -> System.out.println(e));
 //        hashedBlocks.parallel().filter(e -> e.isAlreadySaved()).map(e -> {
@@ -98,8 +124,8 @@ public class RxjavaTest {
         System.out.println("Waiting for future 1");
         future1.join();
         System.out.println("Waiting for future 2");
-//        future2.join();
-
+        future2.join();
+        BackupStreams.shutdown();
     }
 
     private static Integer intenseCalculation(Integer i) {

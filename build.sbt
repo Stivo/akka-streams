@@ -26,4 +26,6 @@ libraryDependencies += "io.reactivex.rxjava2" % "rxjava" % "2.1.8"
 
 libraryDependencies += "com.github.davidmoten" % "rxjava2-extras" % "0.1.18"
 
+libraryDependencies += "org.scala-lang.modules" %% "scala-java8-compat" % "0.8.0"
+
 enablePlugins(PackPlugin)

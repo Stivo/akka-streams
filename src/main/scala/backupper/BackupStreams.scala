@@ -22,7 +22,7 @@ import scala.concurrent.{Await, ExecutionContext, Future}
 
 object BackupStreams {
   val config = new Config(new File("backup"))
-  config.key = ByteString(FileUtils.readFileToByteArray(new File("key.txt")).take(16))
+//  config.key = ByteString(FileUtils.readFileToByteArray(new File("key.txt")).take(16))
   config.compressionMode = CompressionMode.snappy
 
   System.setProperty("logname", config.backupDestinationFolder + "/backup.log")
@@ -45,6 +45,7 @@ object BackupStreams {
   val cpuService = Executors.newFixedThreadPool(10)
   implicit val ex = ExecutionContext.fromExecutorService(cpuService)
 
+  val actors: Seq[LifeCycle] = Seq(backupFileActor, blockStorageActor, chunkWriter)
 
   def main(args: Array[String]): Unit = {
     //        FileUtils.deleteDirectory(new File("backup"))
@@ -52,9 +53,8 @@ object BackupStreams {
     //    new File("backup").mkdir()
     config.backupDestinationFolder.mkdirs()
     val service = Executors.newFixedThreadPool(5)
-    implicit val ex = ExecutionContext.fromExecutorService(service)
+//    implicit val ex = ExecutionContext.fromExecutorService(service)
 
-    val actors: Seq[LifeCycle] = Seq(backupFileActor, blockStorageActor, chunkWriter)
     for (fut <- actors.map(_.startup())) {
       Await.result(fut, 1.minute)
     }
@@ -65,11 +65,15 @@ object BackupStreams {
     val end = System.currentTimeMillis()
     logger.info(s"Took ${end - start} ms")
 
+    shutdown()
+  }
+
+  def shutdown() = {
     for (fut <- actors.map(_.finish())) {
       Await.result(fut, 1.minute)
     }
     system.terminate()
-    service.shutdown()
+//    service.shutdown()
     cpuService.shutdown()
   }
 

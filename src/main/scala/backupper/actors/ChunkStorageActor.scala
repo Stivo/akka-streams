@@ -1,6 +1,7 @@
 package backupper.actors
 
 import java.io.File
+import java.util.concurrent.CompletableFuture
 
 import akka.util.ByteString
 import backupper.model.{Block, Length, StoredChunk}
@@ -8,6 +9,7 @@ import backupper.util.{FileReader, FileWriter}
 import backupper.{Config, LifeCycle}
 import org.slf4j.LoggerFactory
 
+import scala.compat.java8.FutureConverters
 import scala.concurrent.Future
 
 class ChunkStorageActor(val config: Config) extends ChunkHandler {
@@ -62,6 +64,10 @@ class ChunkStorageActor(val config: Config) extends ChunkHandler {
 
 trait ChunkHandler extends LifeCycle {
   def saveBlock(block: Block): Future[StoredChunk]
+
+  def saveBlockJava(block: Block): CompletableFuture[StoredChunk] = {
+    FutureConverters.toJava(saveBlock(block)).toCompletableFuture
+  }
 
   def read(storedChunk: StoredChunk): Future[ByteString]
 }

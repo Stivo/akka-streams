@@ -9,6 +9,7 @@ import backupper.model._
 import backupper.util.{CompressedStream, CompressionMode, Json}
 import com.fasterxml.jackson.core.util.DefaultPrettyPrinter
 
+import scala.compat.java8.FutureConverters
 import scala.concurrent.Future
 import scala.concurrent.ExecutionContext.Implicits.global
 
@@ -27,6 +28,10 @@ trait BlockStorage extends LifeCycle {
 
   def save(storedChunk: StoredChunk): Future[Boolean]
 
+  def saveJava(storedChunk: StoredChunk): CompletableFuture[Boolean] = {
+    FutureConverters.toJava(save(storedChunk)).toCompletableFuture
+  }
+
 
 }
 
@@ -36,6 +41,10 @@ trait BackupFileHandler extends LifeCycle with TypedActor.PreRestart {
   def hasAlready(fileDescription: FileDescription): Future[Boolean]
 
   def saveFile(fileMetadata: FileMetadata): Future[Boolean]
+
+  def saveFileJava(fileMetadata: FileMetadata): CompletableFuture[java.lang.Boolean] = {
+    FutureConverters.toJava(saveFile(fileMetadata).map(_.asInstanceOf[java.lang.Boolean])).toCompletableFuture
+  }
 
   def saveFileSameAsBefore(fd: FileDescription): Future[Boolean]
 }
@@ -54,7 +63,7 @@ trait JsonUser {
     val writer = config.newWriter(file)
     val bytes = Json.mapper.writer(new DefaultPrettyPrinter()).writeValueAsBytes(value)
     val compressed = CompressedStream.compress(ByteString(bytes), CompressionMode.deflate)
-    writer.write(compressed)
+    writer.write(ByteString(bytes))
     writer.finish()
   }
 }
