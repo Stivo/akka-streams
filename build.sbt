@@ -24,4 +24,6 @@ libraryDependencies += "org.iq80.snappy" % "snappy" % "0.4"
 
 libraryDependencies += "io.reactivex.rxjava2" % "rxjava" % "2.1.8"
 
+libraryDependencies += "com.github.davidmoten" % "rxjava2-extras" % "0.1.18"
+
 enablePlugins(PackPlugin)

@@ -1,6 +1,7 @@
 package backupper
 
 import java.io.File
+import java.util.concurrent.CompletableFuture
 
 import akka.actor.TypedActor
 import akka.util.ByteString
@@ -9,11 +10,20 @@ import backupper.util.{CompressedStream, CompressionMode, Json}
 import com.fasterxml.jackson.core.util.DefaultPrettyPrinter
 
 import scala.concurrent.Future
+import scala.concurrent.ExecutionContext.Implicits.global
 
 trait BlockStorage extends LifeCycle {
   def read(hash: Hash): Future[ByteString]
 
   def hasAlready(block: Block): Future[Boolean]
+  def hasAlreadyJava(block: Block): CompletableFuture[Block] = {
+    val fut = new CompletableFuture[Block]()
+    hasAlready(block).map { bool =>
+      block.isAlreadySaved = bool
+      fut.complete(block)
+    }
+    fut
+  }
 
   def save(storedChunk: StoredChunk): Future[Boolean]
 

@@ -22,7 +22,7 @@ import scala.concurrent.{Await, ExecutionContext, Future}
 
 object BackupStreams {
   val config = new Config(new File("backup"))
-  config.key = ByteString(FileUtils.readFileToByteArray(new File("/home/stivo/akka-streams/key.txt")).take(16))
+  config.key = ByteString(FileUtils.readFileToByteArray(new File("key.txt")).take(16))
   config.compressionMode = CompressionMode.snappy
 
   System.setProperty("logname", config.backupDestinationFolder + "/backup.log")
