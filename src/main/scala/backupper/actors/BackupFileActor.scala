@@ -48,6 +48,7 @@ class BackupFileActor(val config: Config) extends BackupFileHandler with JsonUse
   }
 
   override def saveFile(fileMetadata: FileMetadata): Future[Boolean] = {
+    hasChanged = true
     thisBackup += fileMetadata.fd -> fileMetadata
     toBeStored -= fileMetadata.fd
     Future.successful(true)

@@ -9,6 +9,7 @@ import io.reactivex.Observable;
 import io.reactivex.flowables.ConnectableFlowable;
 import io.reactivex.parallel.ParallelFlowable;
 import io.reactivex.schedulers.Schedulers;
+import org.apache.commons.io.FileUtils;
 import org.reactivestreams.Subscriber;
 import org.reactivestreams.Subscription;
 
@@ -23,6 +24,9 @@ import static io.reactivex.BackpressureStrategy.BUFFER;
 
 public class RxjavaTest {
     public static void main(String[] args) throws Exception {
+        File backup = new File("backup");
+        FileUtils.deleteDirectory(backup);
+        backup.mkdir();
         System.setProperty("rx2.computation-threads", "8");
         Iterable<Integer> naturals = IntStream.iterate(0, i -> i + 1)::iterator;
         File file = new File("restored/IMG_0001.JPG");
@@ -99,7 +103,7 @@ public class RxjavaTest {
                     return Observable.fromFuture(future3)
                             .toFlowable(BUFFER);
                 }
-                ).sequential().subscribe(e -> {}, e -> {}, () -> future1.complete(true));
+                ).sequential().subscribe(e -> {}, e -> {e.printStackTrace();}, () -> future1.complete(true));
         md51.connect();
 //        md51.sequential().forEach(e -> System.out.println(e));
 //        hashedBlocks.parallel().filter(e -> e.isAlreadySaved()).map(e -> {
